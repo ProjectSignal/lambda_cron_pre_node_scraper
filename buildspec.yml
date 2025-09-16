@@ -1,0 +1,66 @@
+version: 0.2
+
+env:
+  variables:
+    LAMBDA_FUNCTION_NAME: "lambda-pre-node-scraper"
+    PYTHON_VERSION: "3.11"
+phases:
+  install:
+    runtime-versions:
+      python: 3.11
+    commands:
+      - echo "Installing AWS CLI and dependencies..."
+      - pip install --upgrade pip
+      - pip install awscli
+
+  pre_build:
+    commands:
+      - echo "Pre-build phase started on `date`"
+      - aws --version
+      - echo "Installing Python dependencies..."
+      - pip install -r requirements.txt -t ./
+      - ls -la
+
+  build:
+    commands:
+      - echo "Build phase started on `date`"
+      - echo "Cleaning up unnecessary files..."
+      - find . -name "*.pyc" -delete
+      - find . -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+      - find . -name "*.dist-info" -exec rm -rf {} + 2>/dev/null || true
+      - find . -name "tests" -type d -exec rm -rf {} + 2>/dev/null || true
+      - find . -name "test" -type d -exec rm -rf {} + 2>/dev/null || true
+      - rm -rf .git .gitignore README.md buildspec.yml
+      - echo "Creating ZIP deployment package..."
+      - zip -r lambda-deployment-package.zip . -x "buildspec.yml" "README.md" ".git/*" ".gitignore"
+      - ls -lah lambda-deployment-package.zip
+
+  post_build:
+    commands:
+      - echo "Post-build phase started on `date`"
+      - |
+        if aws lambda get-function --function-name $LAMBDA_FUNCTION_NAME 2>/dev/null; then
+          echo "Updating existing Lambda function $LAMBDA_FUNCTION_NAME"
+          aws lambda update-function-code --function-name $LAMBDA_FUNCTION_NAME --zip-file fileb://lambda-deployment-package.zip
+          aws lambda wait function-updated --function-name $LAMBDA_FUNCTION_NAME
+          echo "Function code updated successfully"
+        else
+          echo "Lambda function $LAMBDA_FUNCTION_NAME does not exist."
+          echo "Create the Lambda and configure environment variables before rerunning the build."
+          echo "Required environment variables:"
+          echo "  - BASE_API_URL"
+          echo "  - INSIGHTS_API_KEY"
+          echo "  - RAPIDAPI_KEY / RAPIDAPI_HOST (primary provider)"
+          exit 1
+        fi
+      - aws lambda get-function --function-name $LAMBDA_FUNCTION_NAME --query 'Configuration.LastModified'
+      - echo "Deployment completed on `date`"
+
+artifacts:
+  files:
+    - lambda-deployment-package.zip
+  name: lambda-pre-node-scraper-$(date +%Y-%m-%d-%H-%M-%S)
+
+cache:
+  paths:
+    - '/root/.cache/pip/**/*'
