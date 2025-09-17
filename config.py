@@ -55,7 +55,6 @@ class Config:
         self.REQUIRE_WORK_OR_EDUCATION = self._get_env("REQUIRE_WORK_OR_EDUCATION", default="true").lower() == "true"
 
         # Metadata
-        self.PROCESSOR_VERSION = "pre_node_scraper_v2"
         self.PLATFORM = "linkedin"
 
     def _get_env(self, key: str, default: Optional[str] = None, required: bool = False) -> str:
@@ -173,7 +172,6 @@ class Config:
                 "fallback_status": self.get_fallback_chain_status(),
             },
             "metadata": {
-                "processor_version": self.PROCESSOR_VERSION,
                 "platform": self.PLATFORM,
             },
         }

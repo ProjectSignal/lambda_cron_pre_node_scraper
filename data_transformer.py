@@ -579,7 +579,6 @@ def add_processing_metadata(data: Dict[str, Any], provider: str,
         "extractedAt": timestamp_iso,
         "scrappedAt": timestamp_iso,
         "processedAt": timestamp_iso,
-        "processor_version": config.PROCESSOR_VERSION,
         "quality_score": quality_score,
         "data_validation_passed": validate_extracted_data(data)
     }
