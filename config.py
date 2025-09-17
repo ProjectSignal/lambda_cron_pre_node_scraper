@@ -55,10 +55,6 @@ class Config:
         self.REQUIRE_WORK_OR_EDUCATION = self._get_env("REQUIRE_WORK_OR_EDUCATION", default="true").lower() == "true"
 
         # Metadata
-        self.WORKER_ID = self._get_env(
-            "WORKER_ID",
-            default=self._get_env("AWS_LAMBDA_FUNCTION_NAME", default="local-worker"),
-        )
         self.PROCESSOR_VERSION = "pre_node_scraper_v2"
         self.PLATFORM = "linkedin"
 
@@ -177,7 +173,6 @@ class Config:
                 "fallback_status": self.get_fallback_chain_status(),
             },
             "metadata": {
-                "worker_id": self.WORKER_ID,
                 "processor_version": self.PROCESSOR_VERSION,
                 "platform": self.PLATFORM,
             },

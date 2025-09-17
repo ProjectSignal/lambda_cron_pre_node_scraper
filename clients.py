@@ -98,9 +98,14 @@ class NodeRepository:
 
     def fetch(self, node_id: str) -> Optional[Dict[str, Any]]:
         """Fetch a node by identifier."""
-        # API Route: nodes.getById, Input: {nodeId}, Output: {data: {...}}
+        # API Route: nodes.getById, Input: {nodeId}, Output: {success: bool, data: {...}}
         response = self.api_client.get(f"nodes/{node_id}")
-        return response.get("data", response)
+        if isinstance(response, dict) and response.get("success") is False:
+            logger.error("Node fetch failed for %s: %s", node_id, response.get("message"))
+            return None
+        if isinstance(response, dict) and "data" in response:
+            return response["data"]
+        return response
 
     def touch_last_attempted(self, node_id: str) -> bool:
         payload = {
@@ -109,12 +114,18 @@ class NodeRepository:
         }
         # API Route: nodes.updateLastAttempted, Input: payload, Output: {success: bool}
         response = self.api_client.request("PATCH", f"nodes/{node_id}", payload)
+        if isinstance(response, dict) and response.get("success") is False:
+            logger.error("Failed to update lastAttemptedAt for %s: %s", node_id, response.get("message"))
+            return False
         return bool(response.get("success", True))
 
     def update_node(self, node_id: str, data: Dict[str, Any]) -> bool:
         payload = {"nodeId": node_id, "data": data}
         # API Route: nodes.updateProfile, Input: payload, Output: {success: bool}
         response = self.api_client.request("PATCH", f"nodes/{node_id}", payload)
+        if isinstance(response, dict) and response.get("success") is False:
+            logger.error("Node update failed for %s: %s", node_id, response.get("message"))
+            return False
         return bool(response.get("success", True))
 
     def update_duplicates(self, linkedin_username: str, exclude_node_id: str, data: Dict[str, Any]) -> int:
@@ -130,6 +141,9 @@ class NodeRepository:
     def delete(self, node_id: str) -> bool:
         # API Route: nodes.delete, Input: {nodeId}, Output: {success: bool}
         response = self.api_client.request("DELETE", f"nodes/{node_id}")
+        if isinstance(response, dict) and response.get("success") is False:
+            logger.error("Node delete failed for %s: %s", node_id, response.get("message"))
+            return False
         return bool(response.get("success", True))
 
     def mark_error(self, node_id: str, error_message: Optional[str] = None) -> bool:
@@ -139,23 +153,35 @@ class NodeRepository:
         }
         # API Route: nodes.markError, Input: payload, Output: {success: bool}
         response = self.api_client.request("POST", "nodes/mark-error", payload)
+        if isinstance(response, dict) and response.get("success") is False:
+            logger.error("Node mark-error failed for %s: %s", node_id, response.get("message"))
+            return False
         return bool(response.get("success", True))
 
     def scraping_statistics(self) -> Dict[str, Any]:
         # API Route: nodes.scrapeStats, Input: {}, Output: {stats: {...}}
         response = self.api_client.get("nodes/scrape-stats")
+        if isinstance(response, dict) and response.get("success") is False:
+            logger.error("Scrape statistics fetch failed: %s", response.get("message"))
+            return {}
         return response.get("stats", response)
 
     def recent_attempts(self, *, hours: int = 1, limit: int = 100) -> List[Dict[str, Any]]:
         params = {"hours": hours, "limit": limit}
         # API Route: nodes.recentAttempts, Input: params, Output: {nodes: [...]}
         response = self.api_client.get("nodes/recent-attempts", params=params)
+        if isinstance(response, dict) and response.get("success") is False:
+            logger.error("Recent attempts fetch failed: %s", response.get("message"))
+            return []
         return response.get("nodes", [])
 
     def scrape_candidates(self, *, limit: int = 5) -> List[Dict[str, Any]]:
         params = {"limit": limit}
         # API Route: nodes.scrapeCandidates, Input: params, Output: {nodes: [...]}
         response = self.api_client.get("nodes/scrape-candidates", params=params)
+        if isinstance(response, dict) and response.get("success") is False:
+            logger.error("Scrape candidates fetch failed: %s", response.get("message"))
+            return []
         return response.get("nodes", [])
 
 

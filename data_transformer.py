@@ -568,17 +568,18 @@ def add_processing_metadata(data: Dict[str, Any], provider: str,
     if quality_score is None:
         quality_score = calculate_quality_score(data, provider)
     
+    timestamp_iso = now.isoformat()
+
     metadata = {
         "platform": config.PLATFORM,
         "scrapped": True,
         "extracted": True,
         "apiScraped": True,
         "processed_via": provider,
-        "extractedAt": now,
-        "scrappedAt": now,
-        "processedAt": now,
+        "extractedAt": timestamp_iso,
+        "scrappedAt": timestamp_iso,
+        "processedAt": timestamp_iso,
         "processor_version": config.PROCESSOR_VERSION,
-        "worker_id": config.WORKER_ID,
         "quality_score": quality_score,
         "data_validation_passed": validate_extracted_data(data)
     }
@@ -600,11 +601,18 @@ def add_processing_metadata(data: Dict[str, Any], provider: str,
 
 def validate_provider_data(data: Dict[str, Any], provider: str) -> Dict[str, Any]:
     """
-    Validate and report on data quality from a specific provider.
-    Returns enhanced data with quality metrics.
+    Validate and report on data quality for normalized profile payloads.
+
+    Args:
+        data: Profile document using standard fields such as linkedinHeadline,
+            about, workExperience, education, etc. (i.e. post-transformation data).
+        provider: Name of the upstream provider for logging/metrics only.
+
+    Returns:
+        Structured quality report containing the derived score and validity flag.
     """
     logger = get_logger(__name__)
-    
+
     if not data:
         return {
             "valid": False, 
@@ -614,8 +622,14 @@ def validate_provider_data(data: Dict[str, Any], provider: str) -> Dict[str, Any
             "provider": provider
         }
     
-    # Calculate quality score
-    quality_score = calculate_quality_score(data, provider)
+    # Calculate quality score (reuse existing score if already present)
+    quality_score = data.get("quality_score")
+    if isinstance(quality_score, str) and quality_score.isdigit():
+        quality_score = int(quality_score)
+    if not isinstance(quality_score, (int, float)):
+        quality_score = calculate_quality_score(data, provider)
+    else:
+        quality_score = int(quality_score)
     
     quality_metrics = {
         "total_fields": len(data),

@@ -141,42 +141,42 @@ class PreNodeProcessor:
                         error_handler.handle_error(failure)
                         return ProcessingOutcome(success=False, error=failure.to_log_message())
 
-                    validation_result = validate_provider_data(profile_data, provider_used)
-                    if not validation_result["valid"]:
-                        error = create_data_quality_error(
-                            f"Data validation failed: {validation_result['quality_report']}",
-                            provider_used,
-                            node_id,
-                            linkedin_username,
-                            validation_result["quality_score"],
-                        )
-                        error_handler.handle_error(error)
-
-                        if validation_result["quality_score"] < config.QUALITY_SCORE_THRESHOLD:
-                            threshold_error = ErrorTaxonomy.create_error(
-                                "DQ_003",
-                                (
-                                    f"Quality score {validation_result['quality_score']} below threshold "
-                                    f"{config.QUALITY_SCORE_THRESHOLD}"
-                                ),
+                    transformed_data = self.transformer.transform_data(profile_data, provider_used)
+                    if transformed_data:
+                        validation_result = validate_provider_data(transformed_data, provider_used)
+                        if not validation_result["valid"]:
+                            error = create_data_quality_error(
+                                f"Data validation failed: {validation_result['quality_report']}",
                                 provider_used,
                                 node_id,
                                 linkedin_username,
-                                {
-                                    "quality_score": validation_result["quality_score"],
-                                    "threshold": config.QUALITY_SCORE_THRESHOLD,
-                                },
+                                validation_result["quality_score"],
                             )
-                            error_handler.handle_error(threshold_error)
+                            error_handler.handle_error(error)
 
-                            if attempt < max_retries - 1:
-                                time.sleep(retry_delay)
-                                retry_delay *= 1.5
-                                continue
-                            return ProcessingOutcome(success=False, error=threshold_error.to_log_message())
+                            if validation_result["quality_score"] < config.QUALITY_SCORE_THRESHOLD:
+                                threshold_error = ErrorTaxonomy.create_error(
+                                    "DQ_003",
+                                    (
+                                        f"Quality score {validation_result['quality_score']} below threshold "
+                                        f"{config.QUALITY_SCORE_THRESHOLD}"
+                                    ),
+                                    provider_used,
+                                    node_id,
+                                    linkedin_username,
+                                    {
+                                        "quality_score": validation_result["quality_score"],
+                                        "threshold": config.QUALITY_SCORE_THRESHOLD,
+                                    },
+                                )
+                                error_handler.handle_error(threshold_error)
 
-                    transformed_data = self.transformer.transform_data(profile_data, provider_used)
-                    if transformed_data:
+                                if attempt < max_retries - 1:
+                                    time.sleep(retry_delay)
+                                    retry_delay *= 1.5
+                                    continue
+                                return ProcessingOutcome(success=False, error=threshold_error.to_log_message())
+
                         quality_score = transformed_data.get("quality_score", 0)
                         self.logger.info(
                             "Transformed data for %s (%s) via %s (Quality Score: %s)",
