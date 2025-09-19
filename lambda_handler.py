@@ -33,7 +33,7 @@ def _parse_sqs_message(record: Dict[str, Any]) -> str:
     return node_id
 
 
-def _parse_direct_invocation(event: Dict[str, Any]) -> List[str]:
+def _parse_direct_invocation(event: Dict[str, Any]) -> List[Dict[str, Any]]:
     payload: Dict[str, Any] = {}
 
     if "body" in event:
@@ -51,21 +51,37 @@ def _parse_direct_invocation(event: Dict[str, Any]) -> List[str]:
     if not payload:
         raise ValueError("Direct invocation must supply nodeId or nodeIds")
 
-    if "nodeIds" in payload:
-        return list(payload["nodeIds"])
+    def _normalize_entry(entry: Dict[str, Any]) -> Dict[str, Any]:
+        node_id_val = entry.get("nodeId")
+        if not node_id_val:
+            raise ValueError("nodeId is required for each entry")
+        normalized: Dict[str, Any] = {"nodeId": node_id_val}
+        if entry.get("userId"):
+            normalized["userId"] = entry["userId"]
+        return normalized
+
+    if "nodes" in payload and isinstance(payload["nodes"], list):
+        return [_normalize_entry(item) for item in payload["nodes"]]
+
+    if "nodeIds" in payload and isinstance(payload["nodeIds"], (list, tuple)):
+        user_id = payload.get("userId")
+        return [{"nodeId": node_id, **({"userId": user_id} if user_id else {})} for node_id in payload["nodeIds"]]
+
     if "nodeId" in payload:
-        return [payload["nodeId"]]
+        return [_normalize_entry(payload)]
 
     raise ValueError("Direct invocation must specify nodeId or nodeIds")
 
 
-def _outcome_to_result(node_id: str, outcome: ProcessingOutcome) -> Dict[str, Any]:
+def _outcome_to_result(node_id: str, outcome: ProcessingOutcome, *, user_id: Optional[str] = None) -> Dict[str, Any]:
     result: Dict[str, Any] = {
         "nodeId": node_id,
         "success": outcome.success,
         "alreadyProcessed": outcome.already_processed,
         "newlyScraped": outcome.newly_scraped,
     }
+    if user_id:
+        result["userId"] = user_id
     if outcome.error:
         result["error"] = outcome.error
     return result
@@ -122,7 +138,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         return response
 
     try:
-        node_ids = _parse_direct_invocation(event)
+        jobs = _parse_direct_invocation(event)
     except ValueError:
         logger.info("Empty event received; nothing to process")
         return {
@@ -135,31 +151,37 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             },
         }
 
-    logger.info("Direct invocation for %s nodes", len(node_ids))
+    logger.info("Direct invocation for %s nodes", len(jobs))
     results: List[Dict[str, Any]] = []
     success_count = 0
     scraped_count = 0
 
-    for node_id in node_ids:
+    for job in jobs:
+        node_id = job["nodeId"]
+        user_id = job.get("userId")
         outcome = processor.process_node(node_id)
-        results.append(_outcome_to_result(node_id, outcome))
+        result_entry = _outcome_to_result(node_id, outcome, user_id=user_id)
+        results.append(result_entry)
         if outcome.success:
             success_count += 1
             if outcome.newly_scraped and not outcome.already_processed:
                 scraped_count += 1
 
     response_body = {
-        "processed": len(node_ids),
+        "processed": len(jobs),
         "succeeded": success_count,
-        "failed": len(node_ids) - success_count,
+        "failed": len(jobs) - success_count,
         "profiles_scraped": scraped_count,
         "results": results,
+        "success": success_count == len(jobs),
     }
+    if len(results) == 1:
+        response_body.update(results[0])
     logger.info(
         "Direct processing complete: processed=%s succeeded=%s failed=%s scraped=%s",
-        len(node_ids),
+        len(jobs),
         success_count,
-        len(node_ids) - success_count,
+        len(jobs) - success_count,
         scraped_count,
     )
     return {"statusCode": 200, "body": response_body}
