@@ -1,11 +1,6 @@
 import os
 from typing import Optional, List, Dict, Any
 
-from dotenv import load_dotenv
-
-# Load environment variables from .env file for local testing
-load_dotenv()
-
 
 class Config:
     """Configuration loader for the pre-node scraper Lambda."""
